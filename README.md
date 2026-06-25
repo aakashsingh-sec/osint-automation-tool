@@ -64,7 +64,11 @@ One indicator per line. Results saved to a single combined JSON report.
 
 ## Example output
 
-[Add screenshot of a CLEAN verdict and a MALICIOUS verdict here]
+### Clean verdict
+![Clean verdict](clean_verdict.png)
+
+### Malicious verdict
+![Malicious verdict](mal_verdict.png)
 
 ## Tech stack
 
