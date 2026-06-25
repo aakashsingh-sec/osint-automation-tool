@@ -3,3 +3,7 @@ venv/
 outputs/
 __pycache__/
 *.pyc
+.streamlit/secrets.toml
+screenshots/.DS_Store
+test_write_via_bash.py
+osint.py.from_outputs_check

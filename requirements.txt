@@ -2,3 +2,7 @@ requests
 rich
 python-dotenv
 OTXv2
+streamlit
+pandas
+plotly
+fpdf2
