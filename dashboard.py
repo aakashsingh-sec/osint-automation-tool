@@ -8,6 +8,7 @@ shelling out to osint.py and reading its JSON output.
 import csv
 import io
 import json
+import re
 import subprocess
 import sys
 import time
@@ -16,6 +17,7 @@ from pathlib import Path
 
 import pandas as pd
 import plotly.graph_objects as go
+import pycountry
 import streamlit as st
 from fpdf import FPDF
 
@@ -168,9 +170,69 @@ def compute_score_breakdown(results: dict) -> list:
     return breakdown
 
 
+def _pdf_safe_text(text, max_len: int = 160, break_every: int = 35) -> str:
+    """Truncate and insert breakpoints into long unbroken tokens (URLs, hashes,
+    base64 blobs) so fpdf2's multi_cell can wrap the line instead of raising
+    'Not enough horizontal space to render a single character'."""
+    text = str(text)
+    if len(text) > max_len:
+        text = text[: max_len - 3] + "..."
+    return re.sub(rf"(\S{{{break_every}}})(?=\S)", r"\1 ", text)
+
+
+def _pdf_source_summary(key: str, val: dict) -> list:
+    """Build a short list of human-readable lines for one source's results,
+    instead of dumping raw JSON (which can contain unwrappable long strings)."""
+    lines = []
+    if key == "virustotal":
+        lines.append(
+            f"Malicious: {val.get('malicious', 0)}  |  Suspicious: {val.get('suspicious', 0)}  |  "
+            f"Harmless: {val.get('harmless', 0)}  |  Undetected: {val.get('undetected', 0)}"
+        )
+    elif key == "abuseipdb":
+        lines.append(f"Abuse confidence: {val.get('abuseConfidenceScore', 0)}%  |  Total reports: {val.get('totalReports', 0)}")
+        lines.append(f"Country: {val.get('countryCode', 'N/A')}  |  ISP: {_pdf_safe_text(val.get('isp', 'N/A'), max_len=60)}")
+    elif key == "shodan":
+        ports = val.get("ports", [])
+        vulns = val.get("vulns", [])
+        lines.append(f"Open ports: {_pdf_safe_text(', '.join(map(str, ports)) or 'none', max_len=100)}")
+        lines.append(f"Known CVEs: {_pdf_safe_text(', '.join(vulns[:10]) or 'none', max_len=100)}")
+    elif key == "urlhaus":
+        status = val.get("query_status", "unknown")
+        lines.append(f"Query status: {status}  |  URL count: {val.get('url_count', 0)}")
+        for entry in val.get("urls", [])[:3]:
+            lines.append(f"  - {_pdf_safe_text(entry.get('url', 'N/A'))}  ({entry.get('threat', 'N/A')})")
+    elif key == "rdap":
+        registrar = "N/A"
+        for entity in val.get("entities", []):
+            if "registrar" in entity.get("roles", []):
+                vcard = entity.get("vcardArray", [])
+                if len(vcard) > 1:
+                    for field in vcard[1]:
+                        if len(field) > 3 and field[0] == "fn":
+                            registrar = field[3]
+                            break
+                break
+        lines.append(f"Registrar: {_pdf_safe_text(registrar, max_len=80)}")
+        for ev in val.get("events", [])[:4]:
+            lines.append(f"  {ev.get('eventAction', '?')}: {ev.get('eventDate', '?')}")
+    elif key == "otx":
+        pulse_info = val.get("pulse_info", {})
+        tags = []
+        for pulse in pulse_info.get("pulses", [])[:5]:
+            tags.extend(pulse.get("tags", []))
+        lines.append(f"Pulses: {pulse_info.get('count', 0)}  |  Reputation: {val.get('reputation', 0)}")
+        if tags:
+            lines.append(f"Tags: {_pdf_safe_text(', '.join(dict.fromkeys(tags)), max_len=120)}")
+    else:
+        lines.append(_pdf_safe_text(json.dumps(val), max_len=160))
+    return lines
+
+
 def build_pdf_report(data: dict) -> bytes:
     """Render a one-page PDF summary of a report dict."""
     pdf = FPDF()
+    pdf.set_margins(left=15, top=15, right=15)
     pdf.add_page()
     pdf.set_font("Helvetica", "B", 16)
     pdf.cell(0, 10, "OSINT Threat Intelligence Report", new_x="LMARGIN", new_y="NEXT")
@@ -183,7 +245,7 @@ def build_pdf_report(data: dict) -> bytes:
     score = data.get("score", 0)
     reasons = data.get("reasons", [])
 
-    pdf.cell(0, 8, f"Indicator: {indicator}", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 8, f"Indicator: {_pdf_safe_text(indicator, max_len=80)}", new_x="LMARGIN", new_y="NEXT")
     pdf.cell(0, 8, f"Type: {ioc_type}", new_x="LMARGIN", new_y="NEXT")
     pdf.cell(0, 8, f"Verdict: {verdict}  (Score: {score}/100)", new_x="LMARGIN", new_y="NEXT")
     pdf.cell(0, 8, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", new_x="LMARGIN", new_y="NEXT")
@@ -194,9 +256,9 @@ def build_pdf_report(data: dict) -> bytes:
     pdf.set_font("Helvetica", "", 11)
     if reasons:
         for r in reasons:
-            pdf.multi_cell(0, 7, f"- {r}")
+            pdf.multi_cell(0, 7, f"- {_pdf_safe_text(r)}", new_x="LMARGIN", new_y="NEXT")
     else:
-        pdf.multi_cell(0, 7, "- No threat signals detected")
+        pdf.multi_cell(0, 7, "- No threat signals detected", new_x="LMARGIN", new_y="NEXT")
 
     pdf.ln(4)
     pdf.set_font("Helvetica", "B", 12)
@@ -205,8 +267,12 @@ def build_pdf_report(data: dict) -> bytes:
     for key, val in data.get("results", {}).items():
         if not val:
             continue
-        snippet = json.dumps(val)[:200]
-        pdf.multi_cell(0, 6, f"[{key}] {snippet}")
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.cell(0, 6, f"[{key}]", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("Helvetica", "", 10)
+        for line in _pdf_source_summary(key, val):
+            pdf.multi_cell(0, 6, line, new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(1)
 
     return bytes(pdf.output())
 
@@ -279,20 +345,46 @@ def render_abuseipdb(ab: dict):
     extra_cols[1].write(f"**Whitelisted:** {'Yes' if ab.get('isWhitelisted') else 'No'}")
     extra_cols[2].write(f"**Tor exit node:** {'⚠️ Yes' if ab.get('isTor') else 'No'}")
 
-    if country and country != "N/A":
+    reports = ab.get("reports", [])
+
+    # Aggregate distinct reporter countries (alpha-2 -> alpha-3 for Plotly's
+    # ISO-3 locationmode). A single-country map adds little value, so only
+    # render the choropleth when reports originate from 2+ distinct countries.
+    country_counts: dict = {}
+    for rep in reports:
+        code = rep.get("reporterCountryCode")
+        if not code:
+            continue
+        country_counts[code] = country_counts.get(code, 0) + 1
+
+    iso3_counts: dict = {}
+    for alpha2, count in country_counts.items():
+        try:
+            entry = pycountry.countries.get(alpha_2=alpha2)
+            if entry is None:
+                continue
+            iso3_counts[entry.alpha_3] = iso3_counts.get(entry.alpha_3, 0) + count
+        except (LookupError, AttributeError):
+            continue
+
+    if len(iso3_counts) >= 2:
         fig = go.Figure(data=go.Choropleth(
-            locations=[country],
-            z=[score if score else 1],
-            locationmode="ISO-3166-1-alpha-2",
+            locations=list(iso3_counts.keys()),
+            z=list(iso3_counts.values()),
+            locationmode="ISO-3",
             colorscale="Reds",
-            showscale=False,
+            showscale=True,
             marker_line_color="white",
+            colorbar_title="Reports",
         ))
         fig.update_geos(projection_type="natural earth", showcountries=True)
-        fig.update_layout(margin=dict(t=10, b=10, l=10, r=10), height=260)
+        fig.update_layout(margin=dict(t=10, b=10, l=10, r=10), height=260,
+                           title="Abuse report origins by country")
         st.plotly_chart(fig, use_container_width=True)
+    elif country and country != "N/A":
+        st.caption(f"📍 Indicator located in **{country}** (not enough distinct reporter countries for a map).")
 
-    reports = ab.get("reports", [])
+
     if reports:
         with st.expander(f"Recent reports ({len(reports)} total)"):
             for rep in reports[:5]:
@@ -665,6 +757,7 @@ with tab_lookup:
 # --- Bulk paste tab ----------------------------------------------------------
 with tab_bulk:
     st.write("Paste one indicator per line (IP, domain, URL, or hash).")
+    st.caption("Press **Enter** to add a new line — click **Run bulk analysis** below to submit.")
     bulk_text = st.text_area("Indicators", height=160, placeholder="8.8.8.8\nexample.com\nd41d8cd98f00b204e9800998ecf8427e")
     bulk_no_shodan = st.checkbox("Skip Shodan", key="bulk_no_shodan")
     bulk_run = st.button("Run bulk analysis", type="primary")
@@ -799,4 +892,4 @@ with tab_timeline:
             margin=dict(t=20, b=20, l=20, r=20),
         )
         st.plotly_chart(fig, use_container_width=True)
-        st.dataframe(df.sort_values("Timestamp", ascending=False), use_container_width=True, hide_index=True)
+        st.datafr

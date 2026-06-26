@@ -6,3 +6,4 @@ streamlit
 pandas
 plotly
 fpdf2
+pycountry

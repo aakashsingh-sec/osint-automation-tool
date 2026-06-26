@@ -48,4 +48,69 @@ dashboard.py             # Streamlit dashboard (lookup, bulk, compare, timeline)
 ```bash
 git clone https://github.com/aakashsingh-sec/osint-automation-tool.git
 cd osint-automation-tool
-pip install
+pip install -r requirements.txt
+```
+
+Copy `.env.example` to `.env` and add your API keys:
+
+```bash
+cp .env.example .env
+```
+
+## API keys required
+
+Free-tier keys from: VirusTotal, AbuseIPDB, AlienVault OTX, URLhaus (auth.abuse.ch). Shodan InternetDB and RDAP require no key. Shodan and URLScan keys are optional.
+
+## Usage (CLI)
+
+```bash
+python osint.py 8.8.8.8
+python osint.py google.com
+python osint.py https://example.com
+python osint.py d41d8cd98f00b204e9800998ecf8427e   # MD5/SHA1/SHA256 hash
+
+# Verbose / debug logging
+python osint.py 8.8.8.8 --verbose
+python osint.py 8.8.8.8 --debug
+```
+
+## File mode (batch)
+
+```bash
+python osint.py --file indicators.txt --workers 3
+```
+
+One indicator per line. Indicators are investigated concurrently (bounded by `--workers`); results are saved to a single combined JSON report.
+
+## Dashboard
+
+```bash
+streamlit run dashboard.py
+```
+
+- **Lookup** — single-indicator analysis with a redesigned verdict card (score gauge, score-breakdown chart), per-source tabs, VirusTotal donut chart, AbuseIPDB country map, and JSON/CSV/PDF export
+- **Bulk Paste** — paste multiple indicators (one per line) and run them all in one pass
+- **Compare** — pick two past reports and view them side by side
+- **Timeline** — score-over-time scatter plot across all saved reports
+- Sidebar — sortable/filterable history with relative timestamps and colored verdict dots, plus a dark mode toggle
+- Submissions are validated and throttled (2-second minimum between submits) to avoid hammering upstream APIs
+
+## Example output
+
+### Clean verdict
+![Clean verdict](clean_verdict.png)
+
+### Malicious verdict
+![Malicious verdict](mal_verdict.png)
+
+### Dashboard
+![Dashboard clean verdict](dashboard_clean_verdict.png)
+![Dashboard malicious verdict](dashboard_mal_verdict.png)
+
+## Tech stack
+
+Python 3.11+, requests, rich, python-dotenv, OTXv2, streamlit, plotly, pandas, fpdf2
+
+## Disclaimer
+
+Built for defensive security research and SOC triage. Submitting indicators to public scanning services may alert threat actors that their infrastructure is under investigation.
