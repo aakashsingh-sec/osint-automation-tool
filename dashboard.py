@@ -892,4 +892,4 @@ with tab_timeline:
             margin=dict(t=20, b=20, l=20, r=20),
         )
         st.plotly_chart(fig, use_container_width=True)
-        st.datafr
+        st.dataframe(df.sort_values("Timestamp", ascending=False), use_container_width=True, hide_index=True)

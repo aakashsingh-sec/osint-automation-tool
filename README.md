@@ -95,17 +95,33 @@ streamlit run dashboard.py
 - Sidebar — sortable/filterable history with relative timestamps and colored verdict dots, plus a dark mode toggle
 - Submissions are validated and throttled (2-second minimum between submits) to avoid hammering upstream APIs
 
-## Example output
+## Screenshots
 
-### Clean verdict
-![Clean verdict](clean_verdict.png)
+**Malicious verdict with threat breakdown**
+![Malicious verdict](screenshots/dashboard_mal_verdict.png)
 
-### Malicious verdict
-![Malicious verdict](mal_verdict.png)
+**Hash lookup (MD5 / SHA1 / SHA256)**
+![Hash verdict](screenshots/dashboard_mal_hash_verdict.png)
 
-### Dashboard
-![Dashboard clean verdict](dashboard_clean_verdict.png)
-![Dashboard malicious verdict](dashboard_mal_verdict.png)
+**Timeline — score history across all saved reports**
+![Timeline](screenshots/dashboard_timeline.png)
+
+**Input validation — malformed indicators are rejected**
+![Invalid input](screenshots/dashboard_invalid_input.png)
+
+## Gallery
+
+| Screenshot | Description |
+|---|---|
+| [dashboard_homepage.png](screenshots/dashboard_homepage.png) | Landing page |
+| [dashboard_mal_verdict.png](screenshots/dashboard_mal_verdict.png) | Malicious verdict with score breakdown |
+| [dashboard_clean_verdict.png](screenshots/dashboard_clean_verdict.png) | Clean verdict |
+| [dashboard_mal_hash_verdict.png](screenshots/dashboard_mal_hash_verdict.png) | Hash lookup result |
+| [dashboard_invalid_input.png](screenshots/dashboard_invalid_input.png) | Input validation |
+| [dashboard_rate_limit.png](screenshots/dashboard_rate_limit.png) | Rate-limit handling |
+| [dashboard_bulk.png](screenshots/dashboard_bulk.png) | Bulk paste mode |
+| [dashboard_compare.png](screenshots/dashboard_compare.png) | Side-by-side report comparison |
+| [dashboard_timeline.png](screenshots/dashboard_timeline.png) | Score-over-time timeline |
 
 ## Tech stack
 
